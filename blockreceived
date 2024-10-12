@@ -1,0 +1,80 @@
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local replicatedStorage = game:GetService("ReplicatedStorage")
+local button = script.Parent -- Reference to the TextButton
+
+-- Specify the remote event names to block
+local remoteEventNames = {
+	"Damage",          -- Blocking damage packets
+	"HealthChange",    -- Blocking health change packets
+	"ResetCharacter",  -- Blocking character reset packets
+}
+
+-- Flag to indicate whether blocking is active
+local blockActive = false
+
+-- Store the original connections for remote events (in case we need to restore them)
+local originalConnections = {}
+
+-- Function to block the specified remote events
+local function blockRemoteEvents()
+	for _, eventName in ipairs(remoteEventNames) do
+		local remoteEvent = replicatedStorage:FindFirstChild(eventName)
+		if remoteEvent then
+			-- Store the original connection, if any
+			if originalConnections[eventName] == nil then
+				originalConnections[eventName] = remoteEvent.OnServerEvent:Connect(function(player, ...)
+					warn("Blocked packet: " .. eventName)
+					return -- Prevent further processing of this packet
+				end)
+			end
+		else
+			warn("Remote Event not found: " .. eventName)
+		end
+	end
+end
+
+-- Function to disconnect all blocked events (optional)
+local function disconnectBlockedEvents()
+	for eventName, connection in pairs(originalConnections) do
+		if connection then
+			connection:Disconnect()
+			originalConnections[eventName] = nil -- Clear the stored connection
+		end
+	end
+end
+
+-- Function to toggle the blocking of packets
+local function toggleBlock()
+	blockActive = not blockActive  -- Toggle the state
+
+	if blockActive then
+		button.BackgroundColor3 = Color3.new(0.905882, 0.196078, 0.0196078) -- Orange when active
+		blockRemoteEvents()  -- Start blocking the specified remote events
+	else
+		button.BackgroundColor3 = Color3.new(0.0117647, 0.0117647, 0.0117647) -- Black when inactive
+		disconnectBlockedEvents()  -- Stop blocking the events (optional)
+	end
+end
+
+-- Function to handle character respawn
+local function onCharacterAdded(character)
+	-- Reapply blocking if it was active before respawn
+	if blockActive then
+		blockRemoteEvents()
+	end
+end
+
+-- Connect the button click event to toggle blocking
+button.MouseButton1Click:Connect(toggleBlock)
+
+-- Connect the character added event (for respawn handling)
+player.CharacterAdded:Connect(onCharacterAdded)
+
+-- Initialize the button state when the game starts
+button.BackgroundColor3 = Color3.new(0.0117647, 0.0117647, 0.0117647) -- Set the initial color to black
+
+-- Ensure the block is active if the player already has a character when the script runs
+if player.Character then
+	onCharacterAdded(player.Character)
+end
